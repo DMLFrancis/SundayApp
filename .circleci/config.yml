@@ -16,6 +16,13 @@ workflows:
                 - main
           requires:
             - build
+      - zap_scan:
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - build
 
 jobs:
   build:
@@ -64,14 +71,6 @@ jobs:
       - run:
           name: start-docker-container
           command: docker start integration_app
-      - run:
-          name: run-zap-scan-against-container
-          command: |
-            CONTAINER_IP=$(docker inspect integration_app --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-            docker run -t owasp/zap2docker-stable zap-baseline.py \
-              -t "https://$CONTAINER_IP:8443/math/add" \
-              -t "http://$CONTAINER_IP:8080/math/add" \
-              -P 8443
 
   deploy:
     docker:
@@ -81,3 +80,16 @@ jobs:
           name: deploy-application
           command: |
             ssh -o StrictHostKeyChecking=no groupca@ec2-16-171-68-247.eu-north-1.compute.amazonaws.com "export SERVER=\"${SERVER}\"; export IMAGE_NAME=\"${IMAGE_NAME}\"; export PRIVATE_KEY=\"${PRIVATE_KEY}\"; rm -rf ~/SundayApp/; git clone https://github.com/DMLFrancis/SundayApp.git; source SundayApp/deploy.sh"
+
+  zap_scan:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - checkout
+      - run:
+          name: Install ZAP Python library
+          command: |
+            pip install python-owasp-zap-v2.4
+      - run:
+          name: Run ZAP scan
+          command: python zap_scan.py
